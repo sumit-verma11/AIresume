@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FileText, Trash2, Clock, Edit3, Loader2 } from 'lucide-react';
+import { Plus, FileText, Trash2, Clock, Edit3, Loader2, Upload } from 'lucide-react';
 import { Resume } from '@/lib/types';
 
 const fadeUp = {
@@ -21,6 +21,7 @@ export default function DashboardPage() {
     const [resumes, setResumes] = useState<Resume[]>([]);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
+    const [importing, setImporting] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -51,6 +52,36 @@ export default function DashboardPage() {
             router.push(`/editor/${data._id}`);
         } catch {
             setCreating(false);
+        }
+    };
+
+    const importResumeFromPDF = async (file: File) => {
+        setImporting(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // 1. Parse PDF to metadata
+            const parseRes = await fetch('/api/resumes/parse', {
+                method: 'POST',
+                body: formData,
+            });
+            const parsedData = await parseRes.json();
+
+            if (parsedData.error) throw new Error(parsedData.error);
+
+            // 2. Save parsed data as new resume
+            const saveRes = await fetch('/api/resumes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(parsedData), // This works because POST /api/resumes accepts partial data
+            });
+            const savedData = await saveRes.json();
+            router.push(`/editor/${savedData._id}`);
+        } catch (error) {
+            console.error('Import error:', error);
+            alert('Failed to import resume. Please try a different PDF or check your OpenAI quota.');
+            setImporting(false);
         }
     };
 
@@ -123,20 +154,46 @@ export default function DashboardPage() {
                             Create, edit, and manage your resumes
                         </p>
                     </div>
-                    <motion.button
-                        onClick={createResume}
-                        disabled={creating}
-                        className="btn-shimmer px-6 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-semibold shadow-lg shadow-teal-500/25 flex items-center gap-2 disabled:opacity-50"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.97 }}
-                    >
-                        {creating ? (
-                            <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                            <Plus size={18} />
-                        )}
-                        {creating ? 'Creating...' : 'New Resume'}
-                    </motion.button>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="file"
+                            id="pdf-import"
+                            className="hidden"
+                            accept=".pdf"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) importResumeFromPDF(file);
+                            }}
+                        />
+                        <motion.button
+                            onClick={() => document.getElementById('pdf-import')?.click()}
+                            disabled={creating || importing}
+                            className="px-6 py-3 rounded-2xl bg-[var(--bg-card)] text-[var(--text-secondary)] font-semibold border border-[var(--border)] hover:border-[var(--border-hover)] hover:text-[var(--text-primary)] transition-all flex items-center gap-2 disabled:opacity-50"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.97 }}
+                        >
+                            {importing ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                                <Upload size={18} />
+                            )}
+                            {importing ? 'Importing...' : 'Import PDF'}
+                        </motion.button>
+                        <motion.button
+                            onClick={createResume}
+                            disabled={creating || importing}
+                            className="btn-shimmer px-6 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-semibold shadow-lg shadow-teal-500/25 flex items-center gap-2 disabled:opacity-50"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.97 }}
+                        >
+                            {creating ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                                <Plus size={18} />
+                            )}
+                            {creating ? 'Creating...' : 'New Resume'}
+                        </motion.button>
+                    </div>
                 </motion.div>
 
                 <AnimatePresence mode="wait">

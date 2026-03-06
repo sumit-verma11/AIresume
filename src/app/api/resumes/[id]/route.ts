@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { getResumesDb, setResumesDb } from '@/lib/mongodb';
 
 export async function GET(
     _request: NextRequest,
@@ -8,10 +7,8 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const { db } = await connectToDatabase();
-        const resume = await db
-            .collection('resumes')
-            .findOne({ _id: new ObjectId(id) });
+        const db = getResumesDb();
+        const resume = db.find(r => r._id === id || r._id === String(id));
 
         if (!resume) {
             return NextResponse.json({ error: 'Resume not found' }, { status: 404 });
@@ -33,17 +30,24 @@ export async function PUT(
     try {
         const { id } = await params;
         const body = await request.json();
-        const { db } = await connectToDatabase();
+
+        const db = getResumesDb();
+        const index = db.findIndex(r => r._id === id || r._id === String(id));
+
+        if (index === -1) {
+            return NextResponse.json({ error: 'Resume not found' }, { status: 404 });
+        }
 
         const { _id, ...updateData } = body;
         void _id;
         updateData.updatedAt = new Date().toISOString();
 
-        await db
-            .collection('resumes')
-            .updateOne({ _id: new ObjectId(id) }, { $set: updateData });
+        const updatedResume = { ...db[index], ...updateData };
+        const newDb = [...db];
+        newDb[index] = updatedResume;
+        setResumesDb(newDb);
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, data: updatedResume });
     } catch {
         return NextResponse.json(
             { error: 'Failed to update resume' },
@@ -58,8 +62,8 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
-        const { db } = await connectToDatabase();
-        await db.collection('resumes').deleteOne({ _id: new ObjectId(id) });
+        const db = getResumesDb();
+        setResumesDb(db.filter(r => r._id !== id && r._id !== String(id)));
         return NextResponse.json({ success: true });
     } catch {
         return NextResponse.json(

@@ -76,6 +76,7 @@ Write a compelling, personalized cover letter (3-4 paragraphs). Be specific abou
         return NextResponse.json({ suggestion });
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('AI Suggest Error:', error);
 
         if (errorMessage.includes('API key')) {
             return NextResponse.json(

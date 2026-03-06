@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
+import { getResumesDb, setResumesDb } from '@/lib/mongodb';
 import { createEmptyResume } from '@/lib/types';
 
 export async function GET() {
     try {
-        const { db } = await connectToDatabase();
-        const resumes = await db
-            .collection('resumes')
-            .find({})
-            .sort({ updatedAt: -1 })
-            .toArray();
+        const resumes = [...getResumesDb()].sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
         return NextResponse.json(resumes);
     } catch {
         return NextResponse.json(
@@ -19,18 +16,27 @@ export async function GET() {
     }
 }
 
-export async function POST() {
+export async function POST(request?: Request) {
     try {
-        const { db } = await connectToDatabase();
-        const newResume = createEmptyResume();
-        const result = await db.collection('resumes').insertOne(newResume);
+        let partialData = {};
+        if (request) {
+            try {
+                partialData = await request.json();
+            } catch {
+                // Ignore empty bodies
+            }
+        }
+        const newResume = {
+            ...createEmptyResume(),
+            ...partialData,
+            _id: crypto.randomUUID()
+        };
+        const db = getResumesDb();
+        setResumesDb([...db, newResume]);
+        return NextResponse.json(newResume, { status: 201 });
+    } catch (err: any) {
         return NextResponse.json(
-            { ...newResume, _id: result.insertedId },
-            { status: 201 }
-        );
-    } catch {
-        return NextResponse.json(
-            { error: 'Failed to create resume' },
+            { error: err.message || 'Failed to create resume' },
             { status: 500 }
         );
     }

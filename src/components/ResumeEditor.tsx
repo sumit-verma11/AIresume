@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Resume, Experience, Education, Project } from '@/lib/types';
 import { Sparkles, Plus, Trash2, GripVertical } from 'lucide-react';
 import {
@@ -78,6 +78,24 @@ function AIButton({
 
 export default function ResumeEditor({ resume, onChange }: ResumeEditorProps) {
     const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+    const [skillsInput, setSkillsInput] = useState(resume.skills.join(', '));
+    const [techInputs, setTechInputs] = useState<Record<string, string>>(
+        resume.projects.reduce((acc, p) => ({ ...acc, [p.id]: p.technologies.join(', ') }), {})
+    );
+
+    // AI Autocomplete state
+    const [activeBulletInfo, setActiveBulletInfo] = useState<{ expIndex: number; bulletIndex: number } | null>(null);
+    const [bulletSuggestion, setBulletSuggestion] = useState('');
+    const [isSuggesting, setIsSuggesting] = useState(false);
+
+    // Sync local state if props change externally (e.g. AI suggestion or different resume)
+    useEffect(() => {
+        setSkillsInput(resume.skills.join(', '));
+    }, [resume.skills]);
+
+    useEffect(() => {
+        setTechInputs(resume.projects.reduce((acc, p) => ({ ...acc, [p.id]: p.technologies.join(', ') }), {}));
+    }, [resume.projects]);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -143,6 +161,47 @@ export default function ResumeEditor({ resume, onChange }: ResumeEditorProps) {
             setAiLoading((p) => ({ ...p, [loadKey]: false }));
         }
     };
+
+    // Live AI Autocomplete Effect
+    useEffect(() => {
+        if (!activeBulletInfo) {
+            setBulletSuggestion('');
+            return;
+        }
+
+        const { expIndex, bulletIndex } = activeBulletInfo;
+        const currentText = resume.experience[expIndex]?.bullets[bulletIndex] || '';
+
+        if (currentText.trim().length < 5) {
+            setBulletSuggestion('');
+            return;
+        }
+
+        // Only search if user hasn't explicitly rejected or cleared it
+        const fetchSuggestion = async () => {
+            setIsSuggesting(true);
+            try {
+                const res = await fetch('/api/ai/autocomplete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        partialText: currentText,
+                        role: resume.experience[expIndex].role,
+                        company: resume.experience[expIndex].company,
+                    })
+                });
+                const data = await res.json();
+                setBulletSuggestion(data.suggestion || '');
+            } catch (err) {
+                setBulletSuggestion('');
+            } finally {
+                setIsSuggesting(false);
+            }
+        };
+
+        const timeoutId = setTimeout(fetchSuggestion, 800);
+        return () => clearTimeout(timeoutId);
+    }, [activeBulletInfo, resume.experience]);
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
@@ -315,34 +374,78 @@ export default function ResumeEditor({ resume, onChange }: ResumeEditorProps) {
                                     </div>
                                     <div>
                                         <label className={labelClass}>Bullet Points</label>
-                                        {exp.bullets.map((bullet, bIdx) => (
-                                            <div key={bIdx} className="flex items-start gap-2 mb-2">
-                                                <input
-                                                    value={bullet}
-                                                    onChange={(e) => {
-                                                        const newBullets = [...exp.bullets];
-                                                        newBullets[bIdx] = e.target.value;
-                                                        updateExperience(expIdx, 'bullets', newBullets);
-                                                    }}
-                                                    placeholder="Describe an achievement..."
-                                                    className={`${inputClass} flex-1`}
-                                                />
-                                                <AIButton
-                                                    onClick={() => handleAIBullet(expIdx, bIdx)}
-                                                    loading={!!aiLoading[`bullet-${expIdx}-${bIdx}`]}
-                                                    label="✨"
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        const newBullets = exp.bullets.filter((_, i) => i !== bIdx);
-                                                        updateExperience(expIdx, 'bullets', newBullets);
-                                                    }}
-                                                    className="text-red-400 hover:text-red-300 p-1"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </div>
-                                        ))}
+                                        {exp.bullets.map((bullet, bIdx) => {
+                                            const isActive = activeBulletInfo?.expIndex === expIdx && activeBulletInfo?.bulletIndex === bIdx;
+                                            return (
+                                                <div key={bIdx} className="flex items-start gap-2 mb-2 relative">
+                                                    <div className="relative flex-1">
+                                                        <input
+                                                            value={bullet}
+                                                            onFocus={() => {
+                                                                setActiveBulletInfo({ expIndex: expIdx, bulletIndex: bIdx });
+                                                                setBulletSuggestion('');
+                                                            }}
+                                                            onBlur={() => {
+                                                                // Slight delay to allow clicks on suggestion button if any
+                                                                setTimeout(() => {
+                                                                    if (activeBulletInfo?.expIndex === expIdx && activeBulletInfo?.bulletIndex === bIdx) {
+                                                                        setActiveBulletInfo(null);
+                                                                    }
+                                                                }, 200);
+                                                            }}
+                                                            onChange={(e) => {
+                                                                const newBullets = [...exp.bullets];
+                                                                newBullets[bIdx] = e.target.value;
+                                                                updateExperience(expIdx, 'bullets', newBullets);
+                                                                if (bulletSuggestion && !e.target.value.endsWith(bulletSuggestion.slice(0, 1))) {
+                                                                    setBulletSuggestion(''); // Clear if they diverge
+                                                                }
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Tab' && isActive && bulletSuggestion) {
+                                                                    e.preventDefault();
+                                                                    const newBullets = [...exp.bullets];
+                                                                    newBullets[bIdx] = bullet + (bullet.endsWith(' ') ? '' : ' ') + bulletSuggestion;
+                                                                    updateExperience(expIdx, 'bullets', newBullets);
+                                                                    setBulletSuggestion('');
+                                                                }
+                                                            }}
+                                                            placeholder="Describe an achievement..."
+                                                            className={`${inputClass} w-full relative z-10 bg-transparent`}
+                                                        />
+                                                        {/* Ghost Text */}
+                                                        {isActive && bulletSuggestion && (
+                                                            <div className="absolute top-0 left-0 w-full h-full px-3 py-2.5 flex items-center pointer-events-none z-0 overflow-hidden rounded-xl">
+                                                                <span className="text-transparent whitespace-pre">
+                                                                    {bullet}
+                                                                </span>
+                                                                <span className="text-[var(--text-muted)] italic whitespace-pre ml-1 animate-pulse">
+                                                                    {bulletSuggestion}
+                                                                </span>
+                                                                <span className="ml-2 text-[10px] bg-[var(--bg-card)] border border-[var(--border)] px-1.5 py-0.5 rounded text-[var(--text-muted)] animate-in fade-in zoom-in duration-200">
+                                                                    Tab ⇥
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <AIButton
+                                                        onClick={() => handleAIBullet(expIdx, bIdx)}
+                                                        loading={!!aiLoading[`bullet-${expIdx}-${bIdx}`] || (isActive && isSuggesting)}
+                                                        label="✨"
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            const newBullets = exp.bullets.filter((_, i) => i !== bIdx);
+                                                            updateExperience(expIdx, 'bullets', newBullets);
+                                                        }}
+                                                        className="text-red-400 hover:text-red-300 p-1"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
                                         <button
                                             onClick={() => updateExperience(expIdx, 'bullets', [...exp.bullets, ''])}
                                             className="text-xs text-teal-400 hover:text-teal-300 mt-1"
@@ -434,13 +537,15 @@ export default function ResumeEditor({ resume, onChange }: ResumeEditorProps) {
                         <div className="editor-section">
                             <h3 className={`${sectionTitleClass} mb-3`}>🛠️ Skills</h3>
                             <input
-                                value={resume.skills.join(', ')}
-                                onChange={(e) =>
+                                value={skillsInput}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSkillsInput(val);
                                     updateField(
                                         'skills',
-                                        e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-                                    )
-                                }
+                                        val.split(',').map((s) => s.trim()).filter(Boolean)
+                                    );
+                                }}
                                 placeholder="React, TypeScript, Node.js, Python..."
                                 className={inputClass}
                             />
@@ -493,14 +598,16 @@ export default function ResumeEditor({ resume, onChange }: ResumeEditorProps) {
                                             <div className="col-span-2">
                                                 <label className={labelClass}>Technologies</label>
                                                 <input
-                                                    value={project.technologies.join(', ')}
-                                                    onChange={(e) =>
+                                                    value={techInputs[project.id] || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setTechInputs(prev => ({ ...prev, [project.id]: val }));
                                                         updateProject(
                                                             idx,
                                                             'technologies',
-                                                            e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-                                                        )
-                                                    }
+                                                            val.split(',').map((s) => s.trim()).filter(Boolean)
+                                                        );
+                                                    }}
                                                     placeholder="React, Node.js..."
                                                     className={inputClass}
                                                 />

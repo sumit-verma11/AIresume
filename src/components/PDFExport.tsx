@@ -172,12 +172,15 @@ export async function generatePDF(resume: Resume): Promise<Blob> {
     return blob;
 }
 
-export function downloadPDF(resume: Resume) {
+export function downloadPDF(resume: Resume, customFilename?: string) {
     generatePDF(resume).then((blob) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${resume.personalInfo.name || 'resume'}.pdf`;
+        const filename = customFilename
+            ? (customFilename.endsWith('.pdf') ? customFilename : `${customFilename}.pdf`)
+            : `${resume.personalInfo.name || 'resume'}.pdf`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

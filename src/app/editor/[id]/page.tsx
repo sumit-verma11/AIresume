@@ -179,9 +179,12 @@ export default function EditorPage({
                             <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center">
                                 <FileText size={14} className="text-white" />
                             </div>
-                            <span className="font-semibold text-sm">
-                                {resume.title || 'Untitled'}
-                            </span>
+                            <input
+                                value={resume.title}
+                                onChange={(e) => setResume({ ...resume, title: e.target.value })}
+                                className="bg-transparent border-none outline-none font-semibold text-sm w-32 focus:w-48 transition-all text-[var(--text-primary)]"
+                                placeholder="Untitled Resume"
+                            />
                             <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-card)] text-[var(--text-muted)] border border-[var(--border)]">
                                 {wordCount} words
                             </span>
@@ -194,8 +197,8 @@ export default function EditorPage({
                             <button
                                 onClick={() => setActivePanel('editor')}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activePanel === 'editor'
-                                        ? 'bg-teal-500/15 text-teal-400'
-                                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                    ? 'bg-teal-500/15 text-teal-400'
+                                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                                     }`}
                             >
                                 <PenTool size={12} />
@@ -204,8 +207,8 @@ export default function EditorPage({
                             <button
                                 onClick={() => setActivePanel('ats')}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activePanel === 'ats'
-                                        ? 'bg-amber-500/15 text-amber-400'
-                                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                    ? 'bg-amber-500/15 text-amber-400'
+                                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                                     }`}
                             >
                                 <BarChart3 size={12} />
@@ -214,8 +217,8 @@ export default function EditorPage({
                             <button
                                 onClick={() => setActivePanel('cover')}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activePanel === 'cover'
-                                        ? 'bg-rose-500/15 text-rose-400'
-                                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                    ? 'bg-rose-500/15 text-rose-400'
+                                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                                     }`}
                             >
                                 <Mail size={12} />
@@ -226,8 +229,8 @@ export default function EditorPage({
                         <button
                             onClick={() => setShowPreview(!showPreview)}
                             className={`p-2 rounded-xl text-xs transition-colors ${showPreview
-                                    ? 'bg-[var(--bg-card)] text-teal-400'
-                                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                ? 'bg-[var(--bg-card)] text-teal-400'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                                 }`}
                             title="Toggle preview"
                         >
@@ -258,7 +261,7 @@ export default function EditorPage({
                             {saved ? 'Saved!' : saving ? 'Saving...' : 'Save'}
                         </motion.button>
                         <motion.button
-                            onClick={() => downloadPDF(resume)}
+                            onClick={() => downloadPDF(resume, resume.title)}
                             className="btn-shimmer inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-medium shadow-lg shadow-teal-500/20"
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
